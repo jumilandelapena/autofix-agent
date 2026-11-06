@@ -1,0 +1,70 @@
+name: autofix-eval
+
+# Runs autofix-agent's eval against this repository on a GitHub runner, inside
+# the real Docker sandbox. The runner's own token opens the pull requests, so
+# no personal access token is needed; the only secret is ANTHROPIC_API_KEY.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated issue numbers to run (empty = all six)"
+        default: ""
+        type: string
+      dry_run:
+        description: "Verify fixes but do not push or open PRs"
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out autofix-agent
+        uses: actions/checkout@v4
+        with:
+          repository: jumilandelapena/autofix-agent
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sandbox image
+        run: docker build -t autofix-sandbox:latest sandbox
+
+      - name: Run the eval on this repository
+        run: >
+          pnpm eval --provider anthropic --sandbox docker --repo "${{ github.repository }}"
+          ${{ inputs.only != '' && format('--only {0}', inputs.only) || '' }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          LLM_PROVIDER: anthropic
+
+      - name: Upload results and trajectories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            docs/eval-results.md
+            evals/out/results.json
+            runs/**/trajectory.jsonl
+            runs/**/trajectory.html
+            runs/**/pr.md
+            runs/**/summary.json
+            runs/**/issue-comment.md
+          if-no-files-found: warn
