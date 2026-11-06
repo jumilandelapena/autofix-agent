@@ -1,0 +1,118 @@
+{
+  "issue": 2,
+  "repo": "demo-inventory-api",
+  "description": "applyDiscount() subtracts percent as an absolute amount",
+  "model": "claude-opus-5-5 (mock replay)",
+  "recorded": "hand-authored replay in the api_response shape; regenerate from a real run with scripts/fixture-from-run.ts",
+  "turns": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Let me look at how the discount is applied."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_1",
+          "name": "search",
+          "input": {
+            "pattern": "applyDiscount",
+            "glob": "src/**/*.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_2",
+          "name": "read_file",
+          "input": {
+            "path": "src/utils.ts",
+            "start_line": 1,
+            "end_line": 20
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "applyDiscount() does `price - percent`, treating the percentage as dollars. Writing the failing test first."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_3",
+          "name": "write_file",
+          "input": {
+            "path": "tests/issue-2-discount.test.ts",
+            "content": "import request from \"supertest\";\nimport { describe, expect, it } from \"vitest\";\nimport { createApp } from \"../src/app.js\";\nimport { applyDiscount } from \"../src/utils.js\";\n\ndescribe(\"issue #2: discount is a percentage, not a dollar amount\", () => {\n  it(\"applies 10% to 399 -> 359.1\", () => {\n    expect(applyDiscount(399, 10)).toBe(359.1);\n    expect(applyDiscount(100, 25)).toBe(75);\n    expect(applyDiscount(4.5, 100)).toBe(0);\n  });\n\n  it(\"GET /items/2/price?discount=10 returns 359.1\", async () => {\n    const res = await request(createApp()).get(\"/items/2/price\").query({ discount: 10 });\n    expect(res.status).toBe(200);\n    expect(res.body.price).toBe(359.1);\n    expect(res.body.formatted).toBe(\"$359.10\");\n  });\n});\n"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_4",
+          "name": "run_tests",
+          "input": {
+            "command": "npx vitest run tests/issue-2-discount.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Reproduced (389 instead of 359.1). Use the percentage."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_5",
+          "name": "edit_file",
+          "input": {
+            "path": "src/utils.ts",
+            "old_text": "  return round2(price - percent);",
+            "new_text": "  return round2(price * (1 - percent / 100));"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_6",
+          "name": "run_tests",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_2_7",
+          "name": "submit",
+          "input": {
+            "summary": "`applyDiscount()` subtracted the percentage from the price as if it were a dollar amount (399 - 10 = 389). It now multiplies by `(1 - percent / 100)` and rounds to cents, so 10% off 399 is 359.10. Added tests/issue-2-discount.test.ts for the helper and the `/items/:id/price` endpoint.",
+            "root_cause": "Wrong formula in applyDiscount(): `price - percent` instead of `price * (1 - percent / 100)`.",
+            "test_file": "tests/issue-2-discount.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    }
+  ]
+}

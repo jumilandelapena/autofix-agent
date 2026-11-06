@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+coverage/
+.vitest/
+runs/
+demo-repo/node_modules/
+evals/out/
+.tmp/

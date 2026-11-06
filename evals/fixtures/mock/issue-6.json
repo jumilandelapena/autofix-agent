@@ -1,0 +1,104 @@
+{
+  "issue": 6,
+  "repo": "demo-inventory-api",
+  "description": "slugify() does not trim leading/trailing hyphens",
+  "model": "claude-opus-5-5 (mock replay)",
+  "recorded": "hand-authored replay in the api_response shape; regenerate from a real run with scripts/fixture-from-run.ts",
+  "turns": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Let me read slugify."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_1",
+          "name": "read_file",
+          "input": {
+            "path": "src/utils.ts",
+            "start_line": 1,
+            "end_line": 12
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "slugify() replaces runs of non-alphanumerics with '-' but never strips the ends. Failing test first."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_2",
+          "name": "write_file",
+          "input": {
+            "path": "tests/issue-6-slugify-trim.test.ts",
+            "content": "import request from \"supertest\";\nimport { describe, expect, it } from \"vitest\";\nimport { createApp } from \"../src/app.js\";\nimport { slugify } from \"../src/utils.js\";\n\ndescribe(\"issue #6: slugify trims leading and trailing hyphens\", () => {\n  it(\"strips hyphens at both ends\", () => {\n    expect(slugify(\"Hello World!\")).toBe(\"hello-world\");\n    expect(slugify(\"  Spaced  \")).toBe(\"spaced\");\n    expect(slugify(\"Mr. Coffee\")).toBe(\"mr-coffee\");\n  });\n\n  it(\"keeps interior hyphens\", () => {\n    expect(slugify(\"USB-C Cable\")).toBe(\"usb-c-cable\");\n  });\n\n  it(\"POST /items produces a clean slug\", async () => {\n    const res = await request(createApp()).post(\"/items\").send({ name: \"Hello World!\", price: 1, quantity: 1 });\n    expect(res.status).toBe(201);\n    expect(res.body.slug).toBe(\"hello-world\");\n  });\n});\n"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_3",
+          "name": "run_tests",
+          "input": {
+            "command": "npx vitest run tests/issue-6-slugify-trim.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Reproduced ('hello-world-'). Trim the ends."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_4",
+          "name": "edit_file",
+          "input": {
+            "path": "src/utils.ts",
+            "old_text": "  return name.toLowerCase().replace(/[^a-z0-9]+/g, \"-\");",
+            "new_text": "  return name\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, \"-\")\n    .replace(/^-+|-+$/g, \"\");"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_5",
+          "name": "run_tests",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_6_6",
+          "name": "submit",
+          "input": {
+            "summary": "`slugify()` collapsed non-alphanumeric runs into hyphens but left the hyphens produced at the start or end of the string, giving `hello-world-` for `Hello World!`. A final `.replace(/^-+|-+$/g, \"\")` strips them; interior hyphens are untouched. Added tests/issue-6-slugify-trim.test.ts including the POST /items path.",
+            "root_cause": "Missing trim of leading/trailing separator characters after the replace step in slugify().",
+            "test_file": "tests/issue-6-slugify-trim.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    }
+  ]
+}

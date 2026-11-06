@@ -1,0 +1,118 @@
+{
+  "issue": 4,
+  "repo": "demo-inventory-api",
+  "description": "ItemStore.search() is case-sensitive",
+  "model": "claude-opus-5-5 (mock replay)",
+  "recorded": "hand-authored replay in the api_response shape; regenerate from a real run with scripts/fixture-from-run.ts",
+  "turns": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Checking how search is implemented."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_1",
+          "name": "search",
+          "input": {
+            "pattern": "search\\(",
+            "glob": "src/**/*.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_2",
+          "name": "read_file",
+          "input": {
+            "path": "src/store.ts",
+            "start_line": 30,
+            "end_line": 45
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "search() uses `name.includes(query)` with no case folding, although the docstring says case-insensitive. Failing test first."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_3",
+          "name": "write_file",
+          "input": {
+            "path": "tests/issue-4-search-case.test.ts",
+            "content": "import request from \"supertest\";\nimport { describe, expect, it } from \"vitest\";\nimport { createApp } from \"../src/app.js\";\nimport { ItemStore } from \"../src/store.js\";\n\ndescribe(\"issue #4: search is case-insensitive\", () => {\n  it(\"store.search ignores case\", () => {\n    const store = new ItemStore();\n    const names = (q: string) => store.search(q).map((i) => i.name);\n    expect(names(\"desk\")).toEqual([\"Desk Lamp\", \"Standing Desk\"]);\n    expect(names(\"DESK\")).toEqual([\"Desk Lamp\", \"Standing Desk\"]);\n    expect(names(\"Desk\")).toEqual([\"Desk Lamp\", \"Standing Desk\"]);\n  });\n\n  it(\"GET /items?q=desk returns both desks\", async () => {\n    const res = await request(createApp()).get(\"/items\").query({ q: \"desk\" });\n    expect(res.status).toBe(200);\n    expect(res.body.total).toBe(2);\n    expect(res.body.items.map((i: { name: string }) => i.name)).toEqual([\"Desk Lamp\", \"Standing Desk\"]);\n  });\n});\n"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_4",
+          "name": "run_tests",
+          "input": {
+            "command": "npx vitest run tests/issue-4-search-case.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Reproduced. Compare lower-cased strings."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_5",
+          "name": "edit_file",
+          "input": {
+            "path": "src/store.ts",
+            "old_text": "    return this.items.filter((item) => item.name.includes(query));",
+            "new_text": "    const needle = query.toLowerCase();\n    return this.items.filter((item) => item.name.toLowerCase().includes(needle));"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_6",
+          "name": "run_tests",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_4_7",
+          "name": "submit",
+          "input": {
+            "summary": "`ItemStore.search()` compared the raw query against the raw name, so `desk` did not match `Desk Lamp` even though the API is documented as case-insensitive. Both sides are now lower-cased before the substring check. Added tests/issue-4-search-case.test.ts for the store and the `/items?q=` endpoint.",
+            "root_cause": "search() used String.prototype.includes without normalising case on either side.",
+            "test_file": "tests/issue-4-search-case.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "issue": 3,
+  "repo": "demo-inventory-api",
+  "description": "ItemStore.update() builds the updated item but never stores it",
+  "model": "claude-opus-5-5 (mock replay)",
+  "recorded": "hand-authored replay in the api_response shape; regenerate from a real run with scripts/fixture-from-run.ts",
+  "turns": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "PUT returns the new values but GET shows old ones, so the store probably does not persist. Reading the store."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_1",
+          "name": "read_file",
+          "input": {
+            "path": "src/store.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_2",
+          "name": "search",
+          "input": {
+            "pattern": "store\\.update|app\\.put",
+            "glob": "src/**/*.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "update() computes `updated` and returns it without writing it back into `this.items`. Failing test first."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_3",
+          "name": "write_file",
+          "input": {
+            "path": "tests/issue-3-update-persists.test.ts",
+            "content": "import request from \"supertest\";\nimport { describe, expect, it } from \"vitest\";\nimport { createApp } from \"../src/app.js\";\nimport { ItemStore } from \"../src/store.js\";\n\ndescribe(\"issue #3: PUT /items/:id persists the update\", () => {\n  it(\"store.update changes what get() returns afterwards\", () => {\n    const store = new ItemStore();\n    const updated = store.update(3, { quantity: 5 });\n    expect(updated?.quantity).toBe(5);\n    expect(store.get(3)?.quantity).toBe(5);\n  });\n\n  it(\"GET after PUT returns the updated fields and slug\", async () => {\n    const app = createApp();\n    const put = await request(app).put(\"/items/3\").send({ name: \"Dotted Notebook\", quantity: 5 });\n    expect(put.status).toBe(200);\n    const get = await request(app).get(\"/items/3\");\n    expect(get.status).toBe(200);\n    expect(get.body.quantity).toBe(5);\n    expect(get.body.name).toBe(\"Dotted Notebook\");\n    expect(get.body.slug).toBe(\"dotted-notebook\");\n  });\n});\n"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_4",
+          "name": "run_tests",
+          "input": {
+            "command": "npx vitest run tests/issue-3-update-persists.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Reproduced. Store the updated item in place."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_5",
+          "name": "edit_file",
+          "input": {
+            "path": "src/store.ts",
+            "old_text": "      tags: patch.tags ?? item.tags,\n    };\n    return updated;",
+            "new_text": "      tags: patch.tags ?? item.tags,\n    };\n    this.items[this.items.indexOf(item)] = updated;\n    return updated;"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_6",
+          "name": "run_tests",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_3_7",
+          "name": "submit",
+          "input": {
+            "summary": "`ItemStore.update()` built the merged item and returned it, but never wrote it back into the array, so the PUT response and later reads disagreed. The updated item now replaces the old one in place. Added tests/issue-3-update-persists.test.ts covering the store and a PUT-then-GET round trip, including the recomputed slug.",
+            "root_cause": "update() returned a new object without replacing the stored one; the array still held the original item.",
+            "test_file": "tests/issue-3-update-persists.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "repo": "demo-inventory-api",
+  "description": "Six planted bugs. Each entry is filed as a GitHub issue with the same number so autofix-agent can be pointed at it.",
+  "issues": [
+    {
+      "number": 1,
+      "title": "GET /items?limit=N returns N+1 items",
+      "labels": ["bug", "api"],
+      "body": "## Steps to reproduce\n\n1. Start the API.\n2. `curl 'http://localhost:3000/items?limit=2'`\n\n## Expected\n\nThe `items` array has at most 2 entries.\n\n## Actual\n\nThe `items` array has 3 entries. `limit=1` returns 2, `limit=4` returns 5. The `limit` field in the response body is correct, only the slice is wrong.\n\nThis breaks every client that pages with `offset += limit`: the last item of each page is repeated as the first item of the next page.",
+      "planted": { "file": "src/utils.ts", "function": "paginate", "kind": "off-by-one" }
+    },
+    {
+      "number": 2,
+      "title": "Discount is subtracted as a dollar amount instead of a percentage",
+      "labels": ["bug", "pricing"],
+      "body": "`GET /items/2/price?discount=10` should apply a 10 % discount to the Standing Desk (399.00) and return `359.10`.\n\nIt returns `389` instead: the endpoint subtracts 10 dollars, not 10 percent.\n\nThe README and the JSDoc on `applyDiscount` both say the second argument is a percentage between 0 and 100. `discount=0` and the range check still behave correctly.",
+      "planted": { "file": "src/utils.ts", "function": "applyDiscount", "kind": "wrong-formula" }
+    },
+    {
+      "number": 3,
+      "title": "PUT /items/:id returns the updated item but the change is not persisted",
+      "labels": ["bug", "api"],
+      "body": "```\ncurl -X PUT localhost:3000/items/3 -H 'content-type: application/json' -d '{\"quantity\": 5}'\n# -> 200 {\"id\":3,\"name\":\"Notebook\",...,\"quantity\":5}\ncurl localhost:3000/items/3\n# -> 200 {\"id\":3,\"name\":\"Notebook\",...,\"quantity\":120}\n```\n\nThe PUT response looks right, but a following GET (and the list endpoint) still show the old values. Renaming an item has the same problem: the new slug shows up in the PUT response only.\n\nExpected: after a successful PUT, GET /items/:id returns the updated fields.",
+      "planted": { "file": "src/store.ts", "function": "ItemStore.update", "kind": "mutation-not-persisted" }
+    },
+    {
+      "number": 4,
+      "title": "Search is case-sensitive although it is documented as case-insensitive",
+      "labels": ["bug", "search"],
+      "body": "`GET /items?q=desk` returns no items. `GET /items?q=Desk` returns \"Desk Lamp\" and \"Standing Desk\".\n\nThe `ItemStore.search` docstring and the README both promise a case-insensitive substring match, and the mobile client lower-cases every query before sending it, so search is effectively broken for it.\n\nExpected: `q=desk`, `q=DESK` and `q=Desk` all return the same two items.",
+      "planted": { "file": "src/store.ts", "function": "ItemStore.search", "kind": "case-sensitivity" }
+    },
+    {
+      "number": 5,
+      "title": "DELETE /items/:id with an unknown id returns 204 and deletes a different item",
+      "labels": ["bug", "api", "data-loss"],
+      "body": "## Steps to reproduce\n\n1. `curl -X DELETE localhost:3000/items/999` -> `204 No Content`\n2. `curl localhost:3000/items` -> only 4 items; \"USB-C Cable\" (id 5) is gone.\n\n## Expected\n\n`404 {\"error\":\"item not found\"}` and no change to the store.\n\n## Notes\n\nDeleting an existing id works. It looks like the store removes *something* even when the id is not found. This is data loss, please prioritise.",
+      "planted": { "file": "src/store.ts", "function": "ItemStore.remove", "kind": "unchecked-index" }
+    },
+    {
+      "number": 6,
+      "title": "slugify leaves a trailing hyphen when the name ends with punctuation",
+      "labels": ["bug", "good first issue"],
+      "body": "Creating an item named `Hello World!` gives the slug `hello-world-`. `Mr. Coffee` gives `mr-coffee` (fine) but `  Spaced  ` gives `-spaced-`.\n\nExpected: no leading or trailing hyphens, so `Hello World!` -> `hello-world` and `  Spaced  ` -> `spaced`. Interior hyphens should stay as they are (`USB-C Cable` -> `usb-c-cable` must keep working).",
+      "planted": { "file": "src/utils.ts", "function": "slugify", "kind": "missing-trim" }
+    }
+  ]
+}

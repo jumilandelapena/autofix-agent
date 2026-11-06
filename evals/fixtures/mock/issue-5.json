@@ -1,0 +1,118 @@
+{
+  "issue": 5,
+  "repo": "demo-inventory-api",
+  "description": "ItemStore.remove() splices index -1 when the id is unknown",
+  "model": "claude-opus-5-5 (mock replay)",
+  "recorded": "hand-authored replay in the api_response shape; regenerate from a real run with scripts/fixture-from-run.ts",
+  "turns": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "A DELETE of an unknown id removes another item; that smells like an unchecked findIndex. Reading the store."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_1",
+          "name": "read_file",
+          "input": {
+            "path": "src/store.ts",
+            "start_line": 60,
+            "end_line": 75
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_2",
+          "name": "search",
+          "input": {
+            "pattern": "store\\.remove|app\\.delete",
+            "glob": "src/**/*.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "remove() calls splice(index, 1) even when findIndex returned -1, which deletes the last element. Failing test first."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_3",
+          "name": "write_file",
+          "input": {
+            "path": "tests/issue-5-delete-unknown.test.ts",
+            "content": "import request from \"supertest\";\nimport { describe, expect, it } from \"vitest\";\nimport { createApp } from \"../src/app.js\";\nimport { ItemStore } from \"../src/store.js\";\n\ndescribe(\"issue #5: deleting an unknown id must not remove anything\", () => {\n  it(\"store.remove returns false and keeps every item\", () => {\n    const store = new ItemStore();\n    expect(store.remove(999)).toBe(false);\n    expect(store.list()).toHaveLength(5);\n    expect(store.get(5)?.name).toBe(\"USB-C Cable\");\n  });\n\n  it(\"DELETE /items/999 returns 404 and the store is unchanged\", async () => {\n    const app = createApp();\n    const del = await request(app).delete(\"/items/999\");\n    expect(del.status).toBe(404);\n    const list = await request(app).get(\"/items\");\n    expect(list.body.total).toBe(5);\n  });\n});\n"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_4",
+          "name": "run_tests",
+          "input": {
+            "command": "npx vitest run tests/issue-5-delete-unknown.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Reproduced: 204 and the last item disappears. Guard the index."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_5",
+          "name": "edit_file",
+          "input": {
+            "path": "src/store.ts",
+            "old_text": "    const index = this.items.findIndex((item) => item.id === id);\n    this.items.splice(index, 1);\n    return true;",
+            "new_text": "    const index = this.items.findIndex((item) => item.id === id);\n    if (index === -1) return false;\n    this.items.splice(index, 1);\n    return true;"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_6",
+          "name": "run_tests",
+          "input": {}
+        }
+      ],
+      "stop_reason": "tool_use"
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_mock_5_7",
+          "name": "submit",
+          "input": {
+            "summary": "`ItemStore.remove()` spliced at whatever `findIndex` returned, so an unknown id gave `splice(-1, 1)` and silently deleted the last item while reporting success. It now returns `false` without touching the array when the id is not found, which makes the route answer 404. Added tests/issue-5-delete-unknown.test.ts for the store and the DELETE endpoint.",
+            "root_cause": "Unchecked findIndex() result: splice(-1, 1) removes the last element instead of nothing.",
+            "test_file": "tests/issue-5-delete-unknown.test.ts"
+          }
+        }
+      ],
+      "stop_reason": "tool_use"
+    }
+  ]
+}

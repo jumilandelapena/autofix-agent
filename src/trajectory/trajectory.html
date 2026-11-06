@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>autofix-agent trajectory</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #2a2f3d; --text: #e6e8ef; --muted: #8b93a7;
+    --accent: #7aa2f7; --ok: #9ece6a; --err: #f7768e; --warn: #e0af68; --add: #1f3a2a; --del: #3d1f27;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7fb; --panel: #ffffff; --border: #d9dde8; --text: #1b1f2a; --muted: #5d657a;
+      --accent: #2f5fd0; --ok: #2f8f3f; --err: #c0392b; --warn: #b7791f; --add: #e3f7e8; --del: #fde4e8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { margin: 0 0 4px; font-size: 18px; }
+  header .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 14px; }
+  header .meta b { color: var(--text); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .drop { border: 2px dashed var(--border); border-radius: 10px; padding: 28px; text-align: center; color: var(--muted); margin: 24px 0; }
+  .drop input { margin-top: 10px; }
+  .turn { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; overflow: hidden; }
+  .turn > summary { cursor: pointer; padding: 10px 14px; display: flex; gap: 12px; align-items: center; list-style: none; }
+  .turn > summary::-webkit-details-marker { display: none; }
+  .turn > summary .n { font-family: var(--mono); color: var(--accent); min-width: 64px; }
+  .turn > summary .tools { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .turn > summary .usage { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .body { padding: 0 14px 14px; border-top: 1px solid var(--border); }
+  .text { white-space: pre-wrap; margin: 12px 0; }
+  .call { border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; }
+  .call .head { padding: 8px 12px; font-family: var(--mono); font-size: 13px; display: flex; gap: 10px; align-items: center; cursor: pointer; }
+  .call .head .name { color: var(--accent); font-weight: 600; }
+  .call .head .status { margin-left: auto; font-size: 12px; }
+  .ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
+  pre { margin: 0; padding: 10px 12px; background: var(--bg); font: 12px/1.45 var(--mono); overflow: auto; max-height: 420px; white-space: pre-wrap; word-break: break-word; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 12px 0; }
+  .diff .del { background: var(--del); display: block; } .diff .add { background: var(--add); display: block; }
+  .phase { text-align: center; margin: 18px 0; color: var(--warn); font-weight: 600; }
+  .phase span { background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 14px; }
+  .end { border-left: 4px solid var(--accent); padding: 10px 14px; background: var(--panel); border-radius: 8px; margin: 16px 0; }
+  .end.bad { border-color: var(--err); }
+  .baseline { color: var(--muted); font-size: 13px; margin: 8px 0 16px; }
+  .hidden { display: none; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">autofix-agent trajectory</h1>
+  <div class="meta" id="meta">Loading trajectory.jsonl ...</div>
+</header>
+<main>
+  <div class="drop" id="drop">
+    Drop a <code>trajectory.jsonl</code> here or pick one.
+    <br /><input type="file" id="file" accept=".jsonl,.json,text/plain" />
+  </div>
+  <div id="content"></div>
+</main>
+<footer>Each turn is one Messages API call. Tool results are shown as the model saw them (already truncated).</footer>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const money = (n) => "$" + Number(n || 0).toFixed(4);
+  const num = (n) => Number(n || 0).toLocaleString();
+
+  function parse(text) {
+    return text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  }
+
+  function lineDiff(oldText, newText) {
+    const a = oldText.split("\n"), b = newText.split("\n");
+    const n = a.length, m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const out = []; let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { out.push(["ctx", a[i]]); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(["del", a[i]]); i++; }
+      else { out.push(["add", b[j]]); j++; }
+    }
+    while (i < n) out.push(["del", a[i++]]);
+    while (j < m) out.push(["add", b[j++]]);
+    return out;
+  }
+
+  function renderDiff(oldText, newText) {
+    const rows = lineDiff(oldText, newText).map(([k, l]) => {
+      const sign = k === "del" ? "-" : k === "add" ? "+" : " ";
+      return `<span class="${k}">${sign} ${esc(l)}</span>`;
+    });
+    return `<pre class="diff">${rows.join("\n")}</pre>`;
+  }
+
+  function renderInput(name, input) {
+    if (name === "edit_file") {
+      return `<div class="label">${esc(input.path)}</div>${renderDiff(input.old_text || "", input.new_text || "")}`;
+    }
+    if (name === "write_file") {
+      return `<div class="label">${esc(input.path)} (new content)</div>${renderDiff("", input.content || "")}`;
+    }
+    if (name === "bash") return `<pre>$ ${esc(input.command)}${input.timeout_s ? `   # timeout ${input.timeout_s}s` : ""}</pre>`;
+    if (name === "read_file") return `<pre>${esc(input.path)}${input.start_line ? `:${input.start_line}-${input.end_line || ""}` : ""}</pre>`;
+    if (name === "search") return `<pre>/${esc(input.pattern)}/${input.glob ? `  glob=${esc(input.glob)}` : ""}</pre>`;
+    if (name === "run_tests") return `<pre>${esc(input.command || "(default test command)")}</pre>`;
+    return `<pre>${esc(JSON.stringify(input, null, 2))}</pre>`;
+  }
+
+  function summarizeCall(name, input) {
+    if (name === "bash") return `bash: ${input.command}`;
+    if (name === "edit_file" || name === "write_file" || name === "read_file") return `${name}: ${input.path}`;
+    if (name === "search") return `search: ${input.pattern}`;
+    if (name === "run_tests") return `run_tests${input.command ? ": " + input.command : ""}`;
+    if (name === "submit") return "submit";
+    return name;
+  }
+
+  function render(events) {
+    const content = $("#content");
+    content.innerHTML = "";
+    const start = events.find((e) => e.type === "run_start");
+    const end = events.find((e) => e.type === "run_end");
+    const baseline = events.find((e) => e.type === "baseline");
+    const lastResp = [...events].reverse().find((e) => e.type === "api_response");
+    const totals = (lastResp && lastResp.cumulative) || {};
+    $("#title").textContent = start ? `#${start.issue.number} ${start.issue.title}` : "trajectory";
+    $("#meta").innerHTML = [
+      start ? `<span>issue <b><a href="${esc(start.issue.url)}" target="_blank" rel="noopener">${esc(start.issue.url)}</a></b></span>` : "",
+      end ? `<span>outcome <b class="${end.outcome === "submitted" ? "ok" : "err"}">${esc(end.outcome)}</b></span>` : "<span>outcome <b>(running)</b></span>",
+      `<span>turns <b>${num(totals.turns)}</b></span>`,
+      `<span>cost <b>${money(totals.costUsd)}</b></span>`,
+      `<span>input <b>${num(totals.inputTokens)}</b></span>`,
+      `<span>cache reads <b>${num(totals.cacheReadTokens)}</b></span>`,
+      `<span>output <b>${num(totals.outputTokens)}</b></span>`,
+    ].join("");
+
+    if (baseline && baseline.tests) {
+      const t = baseline.tests;
+      content.insertAdjacentHTML("beforeend", `<div class="baseline">Baseline: ${t.passed} passed, ${t.failed} failed (${t.total} total) · ${esc((baseline.project && baseline.project.testCommand) || "")}</div>`);
+    }
+
+    const byTurn = new Map();
+    const order = [];
+    for (const e of events) {
+      if (e.type === "api_response") { byTurn.set(e.turn, { resp: e, calls: [], results: new Map() }); order.push({ kind: "turn", turn: e.turn }); }
+      else if (e.type === "tool_call") (byTurn.get(e.turn) || {}).calls?.push(e);
+      else if (e.type === "tool_result") (byTurn.get(e.turn) || {}).results?.set(e.id, e);
+      else if (e.type === "phase" || e.type === "limit" || e.type === "verification" || (e.type === "log" && e.level !== "info")) order.push({ kind: "marker", e });
+    }
+
+    for (const item of order) {
+      if (item.kind === "marker") {
+        const e = item.e;
+        if (e.type === "phase") content.insertAdjacentHTML("beforeend", `<div class="phase"><span>phase: ${esc(e.from)} → ${esc(e.to)} — ${esc(e.reason)}</span></div>`);
+        else if (e.type === "limit") content.insertAdjacentHTML("beforeend", `<div class="end bad"><b>stopped:</b> ${esc(e.kind)} — ${esc(e.detail)}</div>`);
+        else if (e.type === "verification") content.insertAdjacentHTML("beforeend", `<div class="phase"><span class="${e.ok ? "ok" : "err"}">verification ${esc(e.stage)}: ${e.ok ? "ok" : "rejected"}</span></div>`);
+        else content.insertAdjacentHTML("beforeend", `<div class="phase"><span class="warn">${esc(e.message)}</span></div>`);
+        continue;
+      }
+      const t = byTurn.get(item.turn);
+      const resp = t.resp;
+      const u = resp.usage || {};
+      const text = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const uses = (resp.content || []).filter((b) => b.type === "tool_use");
+      const calls = uses.map((use) => {
+        const r = t.results.get(use.id);
+        const status = r ? (r.is_error ? `<span class="status err">error · ${r.duration_ms} ms</span>` : `<span class="status ok">ok · ${r.duration_ms} ms</span>`) : `<span class="status warn">no result</span>`;
+        return `<details class="call" ${use.name === "edit_file" || use.name === "write_file" || use.name === "submit" ? "open" : ""}>
+          <summary class="head"><span class="name">${esc(use.name)}</span><span>${esc(summarizeCall(use.name, use.input).slice(0, 140))}</span>${status}</summary>
+          <div class="label">input</div>${renderInput(use.name, use.input || {})}
+          ${r ? `<div class="label">result</div><pre class="${r.is_error ? "err" : ""}">${esc(r.content)}</pre>` : ""}
+        </details>`;
+      }).join("");
+      const toolNames = uses.map((x) => summarizeCall(x.name, x.input)).join(" · ") || (resp.stop_reason === "end_turn" ? "(no tool call)" : resp.stop_reason);
+      content.insertAdjacentHTML("beforeend", `<details class="turn" ${uses.some((x) => x.name !== "read_file" && x.name !== "search") ? "open" : ""}>
+        <summary><span class="n">turn ${resp.turn}</span><span class="tools">${esc(toolNames)}</span>
+          <span class="usage">in ${num(u.input_tokens)} · cache ${num(u.cache_read_input_tokens)} · out ${num(u.output_tokens)} · ${money(resp.cost_usd)}</span></summary>
+        <div class="body">${text ? `<div class="text">${esc(text)}</div>` : ""}${calls}</div>
+      </details>`);
+    }
+
+    if (end) {
+      const s = end.summary || {};
+      content.insertAdjacentHTML("beforeend", `<div class="end ${end.outcome === "submitted" ? "" : "bad"}"><b>${esc(end.outcome)}</b> — ${esc(s.detail || "")}${s.prUrl ? ` · <a href="${esc(s.prUrl)}" target="_blank" rel="noopener">${esc(s.prUrl)}</a>` : ""}</div>`);
+    }
+    $("#drop").classList.add("hidden");
+  }
+
+  function load(text) {
+    try { render(parse(text)); } catch (err) { $("#meta").textContent = "could not parse trajectory: " + err.message; }
+  }
+
+  $("#file").addEventListener("change", (ev) => {
+    const f = ev.target.files[0];
+    if (f) f.text().then(load);
+  });
+  const drop = $("#drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); });
+  drop.addEventListener("drop", (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) f.text().then(load); });
+
+  fetch("trajectory.jsonl").then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText)))).then(load).catch(() => {
+    $("#meta").textContent = "Open this file over http (e.g. npx serve runs/<id>) to auto-load, or pick the trajectory.jsonl below.";
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "name": "autofix-agent",
+  "version": "1.0.0",
+  "description": "Mini SWE-agent: give it a GitHub issue URL and it reproduces the bug in a Docker sandbox, fixes it, proves the tests pass, and opens a pull request for human review.",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "fix": "tsx src/cli/index.ts fix",
+    "cli": "tsx src/cli/index.ts",
+    "eval": "tsx evals/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude tests/sandbox.docker.test.ts",
+    "test:watch": "vitest",
+    "sandbox:build": "tsx src/cli/index.ts build-image",
+    "fixture:from-run": "tsx scripts/fixture-from-run.ts",
+    "fixtures:build": "tsx scripts/build-mock-fixtures.ts",
+    "demo:gif": "tsx scripts/record-demo.ts",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "chalk": "^6.0.1",
+    "commander": "^15.0.0",
+    "dockerode": "^5.0.1",
+    "octokit": "^5.0.5",
+    "simple-git": "^4.0.2",
+    "tar-stream": "^3.2.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.2",
+    "@types/node": "^20.19.0",
+    "@types/tar-stream": "^3.1.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.0",
+    "vitest": "^5.1.0"
+  }
+}
