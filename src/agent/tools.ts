@@ -177,11 +177,32 @@ export async function runTestCommand(ctx: ToolContext, command: string, timeoutM
   return { command, summary, output, exitCode: res.exitCode };
 }
 
-function maybeEnterFixPhase(ctx: ToolContext, run: TestRun): void {
+/**
+ * Test files that are new or modified relative to HEAD, whichever tool
+ * created them (write_file, edit_file, or a bash heredoc). HEAD is clean when
+ * the agent starts, so any change here is the agent's.
+ */
+export async function changedTestFiles(sandbox: Sandbox): Promise<Set<string>> {
+  const res = await sandbox.exec("git status --porcelain --untracked-files=all", { timeoutMs: 60_000 });
+  const files = new Set<string>();
+  for (const line of res.stdout.split("\n")) {
+    if (!line.trim()) continue;
+    const code = line.slice(0, 2);
+    if (code.includes("D")) continue;
+    let p = line.slice(3).trim().replace(/^"|"$/g, "");
+    if (p.includes(" -> ")) p = p.split(" -> ")[1]!;
+    if (isTestFile(p)) files.add(p);
+  }
+  return files;
+}
+
+async function maybeEnterFixPhase(ctx: ToolContext, run: TestRun): Promise<void> {
   const { state } = ctx;
   if (state.phase !== "reproduce") return;
   if (run.summary.failed === 0) return;
-  const wroteTest = [...state.writtenFiles].some(isTestFile);
+  const changed = await changedTestFiles(ctx.sandbox);
+  for (const f of changed) state.writtenFiles.add(f);
+  const wroteTest = changed.size > 0 || [...state.writtenFiles].some(isTestFile);
   if (!wroteTest) return;
   state.repro = run;
   state.phase = "fix";
@@ -206,7 +227,7 @@ async function bash(ctx: ToolContext, input: z.infer<typeof toolSchemas.bash>): 
     const run = { command: input.command, summary, output, exitCode: res.exitCode };
     if (summary.parsed) {
       ctx.state.lastTestRun = run;
-      maybeEnterFixPhase(ctx, run);
+      await maybeEnterFixPhase(ctx, run);
     }
   }
   return { content: formatExec(res), isError: false };
@@ -278,7 +299,7 @@ async function runTests(ctx: ToolContext, input: z.infer<typeof toolSchemas.run_
   ctx.state.commandsTried.push(command);
   const run = await runTestCommand(ctx, command);
   ctx.state.lastTestRun = run;
-  maybeEnterFixPhase(ctx, run);
+  await maybeEnterFixPhase(ctx, run);
   const tail = truncateOutput(run.output.trim(), 6_000);
   return {
     content: `command: ${command}\nexit code: ${run.exitCode}\nsummary: ${formatSummary(run.summary)}\n--- output ---\n${tail}`,
@@ -304,7 +325,10 @@ export async function verifySubmission(ctx: ToolContext, input: Submission): Pro
   }
   const testRel = toWorkspaceRelative(input.test_file);
   if (!(await sandbox.exists(testRel))) return fail("test_file", `${testRel} does not exist`);
-  if (!state.writtenFiles.has(testRel)) return fail("test_file", `${testRel} was not written in this run; point test_file at the test you added`);
+  const changedTests = await changedTestFiles(sandbox);
+  if (!changedTests.has(testRel) && !state.writtenFiles.has(testRel)) {
+    return fail("test_file", `${testRel} is unchanged relative to the base commit; point test_file at the test you added`);
+  }
 
   // Source change present?
   const status = await sandbox.exec("git status --porcelain --untracked-files=all", { timeoutMs: 60_000 });

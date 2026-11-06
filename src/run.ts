@@ -308,9 +308,18 @@ export async function runFix(opts: FixOptions): Promise<FixResult> {
         });
         result.pushed = push.pushed;
         if (push.pushed || github.kind === "local") {
-          const pr = await github.createPullRequest({ ref, head: finalBranch, base: baseBranch, title, body, labels: [AI_LABEL] });
-          result.pr = { url: pr.url, number: pr.number };
-          log(`pull request: ${pr.url}`);
+          try {
+            const pr = await github.createPullRequest({ ref, head: finalBranch, base: baseBranch, title, body, labels: [AI_LABEL] });
+            result.pr = { url: pr.url, number: pr.number };
+            log(`pull request: ${pr.url}`);
+          } catch (err) {
+            // The fix is verified and the branch is on the remote; a PR-creation
+            // failure (permissions, rate limit) must not erase that.
+            const message = err instanceof Error ? err.message : String(err);
+            result.detail = `fix verified and pushed to ${finalBranch}, but opening the PR failed (${message}); body written to ${result.prFile}`;
+            trajectory.warn(result.detail);
+            log(result.detail);
+          }
         } else {
           result.detail = `fix verified but push was not possible (${push.error}); PR body written to ${result.prFile}`;
           log(result.detail);

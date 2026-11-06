@@ -83,10 +83,13 @@ The system prompt describes three phases, but the harness tracks them in
 
 - **Phase A, reproduce.** The run starts in `reproduce`. When a test run
   (via `run_tests`, or a `bash` command that looks like a test runner) reports
-  at least one failure *and* the agent has written a file that looks like a
-  test, the state moves to `fix`, the failing output is stored as the
-  "before" evidence, and a `[harness]` notice is appended to the next user
-  message. If 20 turns pass without that happening the loop stops with
+  at least one failure *and* `git status` shows a new or modified test file
+  (whatever tool created it: `write_file`, `edit_file` or a bash heredoc), the
+  state moves to `fix`, the failing output is stored as the "before"
+  evidence, and a `[harness]` notice is appended to the next user message.
+  The first live run taught this one: the model wrote its test with
+  `cat > file <<'EOF'`, the harness only tracked `write_file`, and every
+  `submit` was rejected as "not reproduced" until the model gave up. If 20 turns pass without that happening the loop stops with
   `not_reproduced`, the pipeline comments on the issue with the commands it
   tried, and no PR is opened.
 - **Phase B, fix.** Free-form, within the step and budget caps.

@@ -76,6 +76,71 @@ describe("mock end-to-end on demo-repo", () => {
   );
 
   it(
+    "detects a repro test created through bash (heredoc), not only through write_file (issue #6)",
+    async () => {
+      // Found by the first live run: the real model wrote its test with
+      // `cat > file <<'EOF'`, and Phase A never completed.
+      const fixture = path.join(runsDir, "heredoc-fixture.json");
+      fs.mkdirSync(runsDir, { recursive: true });
+      const test = [
+        'import { describe, expect, it } from "vitest";',
+        'import { slugify } from "../src/utils.js";',
+        'describe("issue #6", () => { it("trims hyphens", () => { expect(slugify("Hello World!")).toBe("hello-world"); }); });',
+      ].join("\n");
+      fs.writeFileSync(
+        fixture,
+        JSON.stringify({
+          issue: 6,
+          turns: [
+            {
+              content: [
+                { type: "tool_use", id: "h1", name: "bash", input: { command: `cat > tests/issue-6-heredoc.test.ts <<'EOF'\n${test}\nEOF` } },
+                { type: "tool_use", id: "h2", name: "run_tests", input: { command: "npx vitest run tests/issue-6-heredoc.test.ts" } },
+              ],
+              stop_reason: "tool_use",
+            },
+            {
+              content: [
+                {
+                  type: "tool_use",
+                  id: "h3",
+                  name: "edit_file",
+                  input: {
+                    path: "src/utils.ts",
+                    old_text: '  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");',
+                    new_text: '  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");',
+                  },
+                },
+                { type: "tool_use", id: "h4", name: "run_tests", input: {} },
+              ],
+              stop_reason: "tool_use",
+            },
+            {
+              content: [{ type: "tool_use", id: "h5", name: "submit", input: { summary: "trim", root_cause: "missing trim", test_file: "tests/issue-6-heredoc.test.ts" } }],
+              stop_reason: "tool_use",
+            },
+          ],
+        }),
+      );
+      const result = await runFix({
+        issue: "jumilandelapena/demo-inventory-api#6",
+        provider: "mock",
+        fixture,
+        sandbox: "local",
+        dryRun: true,
+        repoPath: path.join(root, "demo-repo"),
+        issuesFile: path.join(root, "demo-repo/issues.json"),
+        runsDir,
+      });
+      expect(result.outcome, result.detail).toBe("submitted");
+      expect(result.reproduced).toBe(true);
+      expect(result.steps).toBe(3);
+      expect(result.changedFiles).toEqual(["src/utils.ts", "tests/issue-6-heredoc.test.ts"]);
+    },
+    10 * 60_000,
+  );
+
+  it(
     "stops with a comment, not a PR, when the recording never reproduces the bug",
     async () => {
       const fixture = path.join(runsDir, "no-repro-fixture.json");
