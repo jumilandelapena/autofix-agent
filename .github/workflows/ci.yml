@@ -1,0 +1,97 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck + vitest (with Docker sandbox tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sandbox image
+        run: docker build -t autofix-sandbox:latest sandbox
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit, parser, tool, Docker sandbox and mock e2e tests
+        run: pnpm test
+        env:
+          LLM_PROVIDER: mock
+
+      - name: Upload vitest trajectories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-runs
+          path: |
+            runs/vitest/**/trajectory.jsonl
+            runs/vitest/**/trajectory.html
+            runs/vitest/**/pr.md
+          if-no-files-found: ignore
+
+  e2e-mock:
+    name: pnpm fix (mock provider, Docker sandbox, local demo-repo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sandbox image
+        run: docker build -t autofix-sandbox:latest sandbox
+
+      - name: Fix demo issue 1 with the mock provider
+        run: >
+          pnpm fix "jumilandelapena/demo-inventory-api#1"
+          --repo-path demo-repo
+          --issues-file demo-repo/issues.json
+          --dry-run
+          --runs-dir runs
+        env:
+          LLM_PROVIDER: mock
+
+      - name: Assert green suite and non-empty diff
+        run: pnpm tsx scripts/assert-run.ts runs
+
+      - name: Upload trajectory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-mock-trajectory
+          path: |
+            runs/**/trajectory.jsonl
+            runs/**/trajectory.html
+            runs/**/pr.md
+            runs/**/fix.patch
+            runs/**/summary.json
+          if-no-files-found: error

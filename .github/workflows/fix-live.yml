@@ -1,0 +1,78 @@
+name: fix-live
+
+# Run the real agent on one issue and open the pull request.
+# Needs the repository secrets ANTHROPIC_API_KEY and, to push to another
+# repository (for example the demo repo), AUTOFIX_GITHUB_TOKEN (a fine-grained
+# PAT with contents + pull requests + issues write on the target repo).
+# Without AUTOFIX_GITHUB_TOKEN the workflow's own token is used, which can
+# only open PRs on this repository.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_url:
+        description: "GitHub issue URL (https://github.com/owner/repo/issues/N)"
+        required: true
+        type: string
+      max_steps:
+        description: "Maximum model turns"
+        default: "60"
+        type: string
+      budget_usd:
+        description: "Spend cap in USD"
+        default: "5"
+        type: string
+      dry_run:
+        description: "Verify the fix but do not push or open a PR"
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build sandbox image
+        run: docker build -t autofix-sandbox:latest sandbox
+
+      - name: Run autofix-agent
+        run: >
+          pnpm fix "${{ inputs.issue_url }}"
+          --max-steps "${{ inputs.max_steps }}"
+          --budget-usd "${{ inputs.budget_usd }}"
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.AUTOFIX_GITHUB_TOKEN || github.token }}
+          LLM_PROVIDER: anthropic
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autofix-run
+          path: |
+            runs/**/trajectory.jsonl
+            runs/**/trajectory.html
+            runs/**/pr.md
+            runs/**/fix.patch
+            runs/**/summary.json
+            runs/**/issue-comment.md
+          if-no-files-found: warn
