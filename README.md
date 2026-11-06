@@ -21,20 +21,22 @@ a small Express + TypeScript API with six planted bugs
 ([`demo-repo/issues.json`](demo-repo/issues.json)). Each bug is filed as an
 issue there and `pnpm eval` opens one PR per issue.
 
-| Issue | PR |
-|---|---|
-| [#1 GET /items?limit=N returns N+1 items](https://github.com/jumilandelapena/demo-inventory-api/issues/1) | opened by the first live `pnpm eval` run (see below) |
-| [#2 Discount subtracted as a dollar amount](https://github.com/jumilandelapena/demo-inventory-api/issues/2) | same |
-| [#3 PUT /items/:id not persisted](https://github.com/jumilandelapena/demo-inventory-api/issues/3) | same |
-| [#4 Search is case-sensitive](https://github.com/jumilandelapena/demo-inventory-api/issues/4) | same |
-| [#5 DELETE unknown id deletes another item](https://github.com/jumilandelapena/demo-inventory-api/issues/5) | same |
-| [#6 slugify leaves a trailing hyphen](https://github.com/jumilandelapena/demo-inventory-api/issues/6) | same |
+| Issue | PR opened by the agent | Turns | Cost |
+|---|---|---|---|
+| [#1 GET /items?limit=N returns N+1 items](https://github.com/jumilandelapena/demo-inventory-api/issues/1) | [#15](https://github.com/jumilandelapena/demo-inventory-api/pull/15) | 4 | $0.066 |
+| [#2 Discount subtracted as a dollar amount](https://github.com/jumilandelapena/demo-inventory-api/issues/2) | [#17](https://github.com/jumilandelapena/demo-inventory-api/pull/17) | 4 | $0.038 |
+| [#3 PUT /items/:id not persisted](https://github.com/jumilandelapena/demo-inventory-api/issues/3) | [#19](https://github.com/jumilandelapena/demo-inventory-api/pull/19) | 4 | $0.067 |
+| [#4 Search is case-sensitive](https://github.com/jumilandelapena/demo-inventory-api/issues/4) | [#22](https://github.com/jumilandelapena/demo-inventory-api/pull/22) | 5 | $0.038 |
+| [#5 DELETE unknown id deletes another item](https://github.com/jumilandelapena/demo-inventory-api/issues/5) | [#23](https://github.com/jumilandelapena/demo-inventory-api/pull/23) | 4 | $0.037 |
+| [#6 slugify leaves a trailing hyphen](https://github.com/jumilandelapena/demo-inventory-api/issues/6) | [#24](https://github.com/jumilandelapena/demo-inventory-api/pull/24) | 4 | $0.037 |
 
-All PRs: <https://github.com/jumilandelapena/demo-inventory-api/pulls?q=label%3Aai-generated>.
-The build session for this repository had no `ANTHROPIC_API_KEY`, so the
-table and `docs/eval-results.md` currently come from the mock provider. The
-live run is one command: `pnpm eval` with the key and a token in the
-environment; it rewrites the results file and the PR links.
+All agent PRs: <https://github.com/jumilandelapena/demo-inventory-api/pulls?q=label%3Aai-generated>.
+They were opened by the demo repo's
+[`autofix-eval.yml`](demo-repo/.github/workflows/autofix-eval.yml) workflow,
+which runs `pnpm eval` on a GitHub runner inside the real Docker sandbox
+with Claude Opus 5.5. One full trajectory from that run is checked in at
+[`docs/example-run/`](docs/example-run/) (open `trajectory.html` over http
+and it loads the JSONL next to it).
 
 ## How it works
 
@@ -71,22 +73,33 @@ Details, including every failure mode, are in [docs/architecture.md](docs/archit
 
 From [`docs/eval-results.md`](docs/eval-results.md), produced by `pnpm eval`:
 
-| # | Issue | Reproduced | Fixed | Suite green | Steps | Time | Cost | Outcome |
-|---|---|---|---|---|---|---|---|---|
-| 1 | GET /items?limit=N returns N+1 items | yes | yes | yes | 7 | 24s | $0.0000 | submitted |
-| 2 | Discount is subtracted as a dollar amount instead of a percentage | yes | yes | yes | 7 | 25s | $0.0000 | submitted |
-| 3 | PUT /items/:id returns the updated item but the change is not persisted | yes | yes | yes | 7 | 25s | $0.0000 | submitted |
-| 4 | Search is case-sensitive although it is documented as case-insensitive | yes | yes | yes | 7 | 24s | $0.0000 | submitted |
-| 5 | DELETE /items/:id with an unknown id returns 204 and deletes a different item | yes | yes | yes | 7 | 26s | $0.0000 | submitted |
-| 6 | slugify leaves a trailing hyphen when the name ends with punctuation | yes | yes | yes | 6 | 24s | $0.0000 | submitted |
+| # | Issue | Reproduced | Fixed | Suite green | Steps | Time | Cost | PR | Outcome |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | GET /items?limit=N returns N+1 items | yes | yes | yes | 4 | 33s | $0.0661 | [#15](https://github.com/jumilandelapena/demo-inventory-api/pull/15) | submitted |
+| 2 | Discount is subtracted as a dollar amount instead of a percentage | yes | yes | yes | 4 | 31s | $0.0383 | [#17](https://github.com/jumilandelapena/demo-inventory-api/pull/17) | submitted |
+| 3 | PUT /items/:id returns the updated item but the change is not persisted | yes | yes | yes | 4 | 35s | $0.0673 | [#19](https://github.com/jumilandelapena/demo-inventory-api/pull/19) | submitted |
+| 4 | Search is case-sensitive although it is documented as case-insensitive | yes | yes | yes | 5 | 32s | $0.0380 | [#22](https://github.com/jumilandelapena/demo-inventory-api/pull/22) | submitted |
+| 5 | DELETE /items/:id with an unknown id returns 204 and deletes a different item | yes | yes | yes | 4 | 36s | $0.0367 | [#23](https://github.com/jumilandelapena/demo-inventory-api/pull/23) | submitted |
+| 6 | slugify leaves a trailing hyphen when the name ends with punctuation | yes | yes | yes | 4 | 31s | $0.0370 | [#24](https://github.com/jumilandelapena/demo-inventory-api/pull/24) | submitted |
 
-**6/6 fixed · 41 steps · 2.5 min · $0 (mock provider).** These numbers come
-from `LLM_PROVIDER=mock`: the assistant turns are replayed from
-[`evals/fixtures/mock`](evals/fixtures/mock), but the sandbox, the test runs,
-the phase logic, the verification and the patch are real, so the table proves
-the harness, not the model. A live run with Claude Opus 5.5 replaces it; with
-prompt caching a fix of this size is expected to land around 7 to 15 turns
-and well under a dollar.
+**6/6 fixed · 25 turns · 3.3 min · $0.28 total · $0.047 per issue**, Claude
+Opus 5.5 at `effort: high`, Docker sandbox on a GitHub runner. Each fix was
+4 to 5 API calls because the model batches several tool calls per turn, and
+prompt caching served 16k to 27k tokens per run from cache against about 12
+uncached input tokens per turn.
+
+**What the first live run taught.** Its issue #1 ended `stalled`: the model
+wrote its repro test with a bash heredoc, the harness only tracked
+`write_file`, so every `submit` came back "not reproduced". The model
+reported the contradiction instead of gaming it. The harness now reads new
+and modified test files from `git status`, whatever tool created them, and
+that case is a regression test. The same run also showed that an
+installer rewriting `package-lock.json` leaked into the diff; install side
+effects are now committed inside the sandbox before the baseline.
+
+The mock provider gives the same table at $0 (`pnpm eval --provider mock`):
+assistant turns replayed from [`evals/fixtures/mock`](evals/fixtures/mock),
+everything else real. That is what CI runs on every push.
 
 ## Run it
 
