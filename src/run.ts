@@ -191,6 +191,14 @@ export async function runFix(opts: FixOptions): Promise<FixResult> {
       const install = await sandbox.exec(project.installCommand, { timeoutMs: 600_000 });
       trajectory.log({ type: "sandbox", event: "install", detail: { command: project.installCommand, exitCode: install.exitCode, stderr: install.stderr.slice(-2000) } });
       if (install.exitCode !== 0) throw new Error(`dependency install failed (exit ${install.exitCode}): ${install.stderr.slice(-1500)}`);
+      // Installers may rewrite tracked files (package-lock.json, go.sum, uv.lock).
+      // Commit those side effects inside the sandbox so every later diff against
+      // HEAD contains only what the agent changed.
+      const settle = await sandbox.exec(
+        'git config user.name autofix-agent && git config user.email autofix-agent@users.noreply.github.com && git add -u && (git diff --cached --quiet || git commit -q -m "chore(autofix): dependency install side effects, not part of the fix")',
+        { timeoutMs: 120_000 },
+      );
+      if (settle.exitCode !== 0) trajectory.warn(`could not record install side effects: ${settle.stderr.slice(-500)}`);
     }
 
     const ctx: ToolContext = {

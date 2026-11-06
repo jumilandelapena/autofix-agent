@@ -51,9 +51,12 @@ end-to-end test; it is not isolated and says so.
 `sandbox/detect.ts` reads `package.json` / `pyproject.toml` /
 `requirements.txt` / `go.mod` to choose install, test and lint commands
 (vitest, jest, mocha, pytest, `go test`). The pipeline installs dependencies
-while the network is still attached, runs the suite once to record the
-baseline, lists the existing test files, then disconnects the container from
-every Docker network. From here on the agent cannot reach anything.
+while the network is still attached, commits any tracked files the installer
+rewrote (`package-lock.json`, `go.sum`, `uv.lock`) inside the sandbox so later
+diffs against `HEAD` contain only the agent's work, runs the suite once to
+record the baseline, lists the existing test files, then disconnects the
+container from every Docker network. From here on the agent cannot reach
+anything.
 
 ## 3. Tools
 
