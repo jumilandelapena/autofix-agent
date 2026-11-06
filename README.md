@@ -170,16 +170,13 @@ the repository secrets and opens the PR.
 
 ## Publishing (first time)
 
-```bash
-# this repository
-gh repo create autofix-agent --public --source . --push
+[`scripts/publish.sh`](scripts/publish.sh) creates both public repositories
+with `gh`, pushes them, and files the six demo issues in order so their
+numbers match `issues.json`:
 
-# the demo repository, as its own repo, and its six issues
-cd demo-repo && git init -b main && git add -A && git commit -m "chore: demo inventory api with six planted bugs"
-gh repo create demo-inventory-api --public --source . --push
-node -e 'for (const i of require("./issues.json").issues) console.log(i.number, i.title)'
-# then, one per issue (in order, so the numbers match issues.json):
-gh issue create --title "<title>" --body-file <(node -e 'console.log(require("./issues.json").issues[0].body)') --label bug
+```bash
+bash scripts/publish.sh            # uses the logged-in gh account
+pnpm eval                          # with ANTHROPIC_API_KEY + GITHUB_TOKEN: opens the six PRs
 ```
 
 ## License
